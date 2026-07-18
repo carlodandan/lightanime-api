@@ -1,4 +1,4 @@
-import { getMedia }                from "./core/anilist.js";
+import { getMedia, fetchAniListHome }                from "./core/anilist.js";
 import { mapAnimeIds }             from "./core/mapper.js";
 import mangaHandler                from "./providers/allmanga.js";
 import aninekoHandler              from "./providers/anineko.js";
@@ -146,8 +146,32 @@ export default {
     m = path.match(/^\/stream\/2dhive\/download\/(\d+)\/(sub|dub)\/(\d+)\/?$/);
     if (m) return dhiveHandler.fetch(request);
 
+
+    if (path === "/" || path === "/home") {
+      try {
+        const homeData = await fetchAniListHome();
+        
+        if (!homeData) {
+          return json({ error: "Failed to fetch homepage data from AniList" }, 500);
+        }
+
+        // Clean up or structure the data payload nicely for your frontend
+        return json({
+          success: true,
+          data: {
+            airingToday: homeData.airing?.airingSchedules ?? [],
+            trendingNow: homeData.trending?.mediaTrends?.map(t => t.media) ?? [],
+            popularThisSeason: homeData.popular?.media ?? [],
+            topRecommendations: homeData.recommendations?.recommendations ?? []
+          }
+        });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
     return json({
-      name: "Anivexa API 2.1",
+      name: "lightanime-api",
       cache: _CACHE_ENABLED,
       providers: [
         "allmanga",

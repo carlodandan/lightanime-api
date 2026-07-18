@@ -32,6 +32,74 @@ async function fetchFromAniList(id) {
   return json.data?.Media ?? null;
 }
 
+async function fetchAniListHome() {
+  const homeQuery = `
+    query {
+      # 1. Currently Airing Anime (Next 7 days)
+      airing: Page(page: 1, perPage: 15) {
+        airingSchedules(airingAt_greater: ${Math.floor(Date.now() / 1000)}, sort: TIME) {
+          episode
+          airingAt
+          media {
+            id
+            title { english romaji }
+            coverImage { large }
+          }
+        }
+      }
+      # 2. Trending Anime Right Now
+      trending: Page(page: 1, perPage: 15) {
+        mediaTrends(sort: TRENDING_DESC) {
+          media {
+            id
+            title { english romaji }
+            coverImage { large }
+            format
+          }
+        }
+      }
+      # 3. Popular This Season
+      popular: Page(page: 1, perPage: 15) {
+        media(type: ANIME, sort: POPULARITY_DESC) {
+          id
+          title { english romaji }
+          coverImage { large }
+          episodes
+        }
+      }
+      # 4. Top Recommended Show Pairs
+      recommendations: Page(page: 1, perPage: 15) {
+        recommendations(sort: RATING_DESC) {
+          rating
+          media {
+            id
+            title { english romaji }
+            coverImage { large }
+          }
+          mediaRecommendation {
+            id
+            title { english romaji }
+          }
+        }
+      }
+    }
+  `;
+
+  const res = await fetch("https://graphql.anilist.co", {
+    method: "POST",
+    headers: { 
+      "Content-Type": "application/json", 
+      "Accept": "application/json",
+      "User-Agent": UA 
+    },
+    body: JSON.stringify({ query: homeQuery }),
+  }).catch(() => null);
+
+  if (!res || !res.ok) return null;
+  const json = await res.json();
+  return json.data ?? null;
+}
+
 async function getMedia(anilistId) {
   const id = Number(anilistId);
   if (resolved.has(id)) return resolved.get(id);
@@ -149,4 +217,4 @@ function forgetMedia(anilistId) {
   resolved.delete(Number(anilistId));
 }
 
-export { getMedia, forgetMedia };
+export { getMedia, forgetMedia, fetchAniListHome };
