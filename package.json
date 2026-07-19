@@ -1,8 +1,18 @@
 {
   "name": "lightanime-api",
   "version": "1.0.0",
+  "description": "",
   "type": "module",
+  "main": "index.js",
   "scripts": {
-    "dev": "node server.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.28.2",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
   }
 }
