@@ -153,7 +153,6 @@ function getAnilistId(anime) {
 }
 
 async function fetchServers(slug, ep, anilist_id) {
-  // 1. Get Anilist ID if not provided
   let aid = anilist_id;
   if (!aid) {
     const meta = await _get(`/api/v1/anime/${slug}/meta`);
@@ -161,7 +160,6 @@ async function fetchServers(slug, ep, anilist_id) {
   }
   if (!aid) throw { status: 404, message: "Could not determine Anilist ID for this slug" };
 
-  // 2. Fetch Flix servers
   let flix;
   try {
     flix = await _get(`/api/flix/${aid}/${ep}`);
@@ -176,7 +174,7 @@ async function fetchServers(slug, ep, anilist_id) {
   return {
     sub: sortLinks(servers.filter(s => ["sub", "s-sub"].includes(s.dataType))),
     dub: sortLinks(servers.filter(s => ["dub", "s-dub"].includes(s.dataType))),
-    anime: null,        // no watch data available
+    anime: null,
     current: null,
     duration: null,
     intro_start: null,
@@ -225,12 +223,10 @@ app.get("/top", asyncHandler(async (req, res) => {
 }));
 
 app.get("/schedule", asyncHandler(async (req, res) => {
-  // Build default parameters using current date and default timezone
   const now = new Date();
   const defaultYear = now.getFullYear().toString();
-  const defaultMonth = (now.getMonth() + 1).toString(); // 1‑12
+  const defaultMonth = (now.getMonth() + 1).toString();
   const defaultTz = "Asia/Manila";
-
   const { tz = defaultTz, year = defaultYear, month = defaultMonth } = req.query;
   res.json(await _get("/api/v1/schedule", { tz, year, month }));
 }));
@@ -240,7 +236,7 @@ app.get("/info/:slug", asyncHandler(async (req, res) => {
     _get(`/api/v1/anime/${req.params.slug}/meta`),
     _get(`/api/v1/anime/${req.params.slug}/episodes`, { limit: 2000 })
   ]);
-  const anime = meta.anime || meta; // adjust if meta wraps data differently
+  const anime = meta.anime || meta;
   const ep_list = Array.isArray(eps) ? eps : (eps.data || eps.episodes || []);
   res.json({ ...anime, episodes: ep_list, anilist_id: getAnilistId(anime) });
 }));
@@ -269,11 +265,101 @@ app.get("/stream/:access_id", asyncHandler(async (req, res) => {
 }));
 
 app.get("/thumbnails/:anilist_id", asyncHandler(async (req, res) => {
-  res.json(await _get(`/api/v1/thumbnails/${req.params.anilist_id}`));
+  res.json(await _get(`/api/thumbnails/${req.params.anilist_id}`));
 }));
 
 app.get("/recommendations/:slug", asyncHandler(async (req, res) => {
   res.json(await _get(`/api/v1/anime/${req.params.slug}/recommendations`));
+}));
+
+// ========== NEW PROXY ROUTES (with /api prefix and query param) ==========
+// These routes accept the full CDN URL as ?url= and rewrite the manifest/segment requests
+
+app.get("/api/proxy/manifest", asyncHandler(async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ detail: "Missing ?url=..." });
+
+  // Fetch the manifest from the CDN
+  const response = await fetch(url, {
+    headers: { ...HEADERS, Referer: `${BASE}/` }
+  });
+  if (!response.ok) {
+    throw { status: response.status, message: "Failed to fetch manifest" };
+  }
+  let manifest = await response.text();
+
+  // Rewrite all .ts segment URIs to go through our segment proxy
+  const baseUrl = new URL(url).origin;
+  const segmentRegex = /(https?:\/\/[^\s"']+\.ts)|([^/\s"']+\.ts)/g;
+  manifest = manifest.replace(segmentRegex, (match) => {
+    const absolute = match.startsWith('http') ? match : new URL(match, baseUrl).href;
+    return `/api/proxy/segment?url=${encodeURIComponent(absolute)}`;
+  });
+
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Content-Type', 'application/vnd.apple.mpegurl');
+  res.send(manifest);
+}));
+
+app.get("/api/proxy/segment", asyncHandler(async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ detail: "Missing ?url=..." });
+
+  const response = await fetch(url, {
+    headers: { ...HEADERS, Referer: `${BASE}/` }
+  });
+  if (!response.ok) {
+    throw { status: response.status, message: "Segment fetch failed" };
+  }
+  const data = await response.arrayBuffer();
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Content-Type', response.headers.get('content-type') || 'video/MP2T');
+  res.send(Buffer.from(data));
+}));
+
+// ========== LEGACY PROXY ROUTES (keep for backward compatibility) ==========
+// These use the old /proxy/:accessId/... path – you may remove them later
+app.get("/proxy/:accessId/manifest.m3u8", asyncHandler(async (req, res) => {
+  const { accessId } = req.params;
+  const v = req.query.v ? parseInt(req.query.v) : 2;
+  // We need to get the original stream URL from the accessId
+  const streamData = await getStreamUrl(accessId, v);
+  const originalUrl = streamData.url;
+
+  const response = await fetch(originalUrl, {
+    headers: { ...HEADERS, Referer: `${BASE}/` }
+  });
+  if (!response.ok) {
+    throw { status: response.status, message: "Failed to fetch manifest" };
+  }
+  let manifest = await response.text();
+
+  const baseUrl = new URL(originalUrl).origin;
+  const segmentRegex = /(https?:\/\/[^\s"']+\.ts)|([^/\s"']+\.ts)/g;
+  manifest = manifest.replace(segmentRegex, (match) => {
+    const absolute = match.startsWith('http') ? match : new URL(match, baseUrl).href;
+    return `/proxy/${accessId}/segment?url=${encodeURIComponent(absolute)}`;
+  });
+
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Content-Type', 'application/vnd.apple.mpegurl');
+  res.send(manifest);
+}));
+
+app.get("/proxy/:accessId/segment", asyncHandler(async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ detail: "Missing ?url=..." });
+
+  const response = await fetch(url, {
+    headers: { ...HEADERS, Referer: `${BASE}/` }
+  });
+  if (!response.ok) {
+    throw { status: response.status, message: "Segment fetch failed" };
+  }
+  const data = await response.arrayBuffer();
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Content-Type', response.headers.get('content-type') || 'video/MP2T');
+  res.send(Buffer.from(data));
 }));
 
 // Global Error Handler
