@@ -1,2 +1,5 @@
 # Documentation
 Documentation
+
+# Ignore documentation files
+node_modules/
