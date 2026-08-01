@@ -12,7 +12,9 @@
   "license": "ISC",
   "packageManager": "pnpm@10.28.2",
   "dependencies": {
+    "@mongodb-js/zstd": "^7.0.0",
     "cors": "^2.8.6",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "puppeteer": "^25.4.0"
   }
 }
