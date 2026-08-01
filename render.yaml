@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: lightanime
+    env: node
+    buildCommand: pnpm install
+    startCommand: pnpm start
+    envVars:
+      - key: NODE_VERSION
+        value: 24.16.0
