@@ -6,12 +6,11 @@ import puppeteer, { executablePath } from 'puppeteer';
  */
 export async function fetchWithCloudflareBypass(url, options = {}) {
   const browser = await puppeteer.launch({
-    executablePath: executablePath(),
     headless: true,
     args: [
         '--no-sandbox',
-        '--disable-setuid-sandbox'
-    ]
+        '--disable-setuid-sandbox',
+    ],
 });
 
   try {
