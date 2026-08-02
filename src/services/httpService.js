@@ -1,6 +1,6 @@
 // services/httpService.js
 import { BASE, FLIX, _UA } from '../utils/constants.js';
-import { fetchWithTimeout, isCloudflareChallenge } from './upstreamFetch.js';
+import { fetchWithTimeout, readUpstreamText } from './upstreamFetch.js';
 
 const BROWSER_HEADERS = {
   'User-Agent': _UA,
@@ -35,27 +35,18 @@ export async function _get(path, params = {}) {
     throw error;
   }
 
-  const contentType = response.headers.get('content-type') || '';
-
-  if (!response.ok) {
-    const text = await response.text();
-    if (isCloudflareChallenge(text, contentType, response.url)) {
-      throw new Error('Cloudflare challenge detected while reaching the upstream provider');
-    }
-    throw new Error(`Upstream request failed with ${response.status}: ${text.slice(0, 220)}`);
-  }
+  const { body, contentType } = await readUpstreamText(response, {
+    challengeMessage: 'Cloudflare challenge detected while reaching the upstream provider',
+    failureMessage: `Upstream request failed with ${response.status}`,
+  });
 
   if (contentType.includes('text/html')) {
-    const html = await response.text();
-    if (isCloudflareChallenge(html, contentType, response.url)) {
-      throw new Error('Cloudflare challenge detected while reaching the upstream provider');
-    }
-    return html;
+    return body;
   }
 
   if (contentType.includes('application/json')) {
-    return response.json();
+    return JSON.parse(body);
   }
 
-  return response.text();
+  return body;
 }

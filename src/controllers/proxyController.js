@@ -1,5 +1,5 @@
 import { BASE, HEADERS, _UA } from "../utils/constants.js";
-import { fetchWithTimeout, isCloudflareChallenge } from "../services/upstreamFetch.js";
+import { fetchWithTimeout, readUpstreamText } from "../services/upstreamFetch.js";
 
 const CDN_FETCH_HEADERS = {
   'User-Agent': _UA,
@@ -16,21 +16,10 @@ export async function proxyManifest(req, res) {
     headers: CDN_FETCH_HEADERS,
   });
 
-  const contentType = response.headers.get('content-type') || '';
-  if (!response.ok) {
-    const text = await response.text();
-    if (isCloudflareChallenge(text, contentType, response.url)) {
-      console.error('[Proxy] Cloudflare block detected for manifest');
-      throw { status: 503, message: 'Cloudflare challenge detected while fetching the manifest' };
-    }
-    throw { status: response.status, message: `CDN fetch failed: ${text.slice(0, 200)}` };
-  }
-
-  let manifest = await response.text();
-  if (isCloudflareChallenge(manifest, contentType, response.url)) {
-    console.error('[Proxy] Cloudflare block detected for manifest');
-    throw { status: 503, message: 'Cloudflare challenge detected while fetching the manifest' };
-  }
+  const { body: manifest } = await readUpstreamText(response, {
+    challengeMessage: 'Cloudflare challenge detected while fetching the manifest',
+    failureMessage: 'CDN fetch failed',
+  });
 
   // 1. Resolve relative paths against the FULL manifest URL context, not just origin
   const manifestUrlObj = new URL(url);

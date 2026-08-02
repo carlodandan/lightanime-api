@@ -29,3 +29,54 @@ export async function fetchWithTimeout(url, init = {}, timeoutMs = 20000) {
     clearTimeout(timeout);
   }
 }
+
+export async function readUpstreamText(response, options = {}) {
+  const contentType = response.headers.get('content-type') || '';
+  const body = await response.text();
+
+  if (isCloudflareChallenge(body, contentType, response.url)) {
+    throw options.challengeError || {
+      status: 503,
+      message: options.challengeMessage || 'Cloudflare challenge detected while contacting the upstream provider',
+    };
+  }
+
+  if (!response.ok) {
+    throw options.failureError || {
+      status: response.status,
+      message: options.failureMessage || `Upstream request failed with ${response.status}: ${body.slice(0, 220)}`,
+    };
+  }
+
+  return {
+    body,
+    contentType,
+  };
+}
+
+export async function readUpstreamBuffer(response, options = {}) {
+  const contentType = response.headers.get('content-type') || '';
+  const buffer = Buffer.from(await response.arrayBuffer());
+
+  if (contentType.includes('text/html')) {
+    const body = buffer.toString('utf8');
+    if (isCloudflareChallenge(body, contentType, response.url)) {
+      throw options.challengeError || {
+        status: 503,
+        message: options.challengeMessage || 'Cloudflare challenge detected while contacting the upstream provider',
+      };
+    }
+  }
+
+  if (!response.ok) {
+    throw options.failureError || {
+      status: response.status,
+      message: options.failureMessage || `Upstream request failed with ${response.status}`,
+    };
+  }
+
+  return {
+    buffer,
+    contentType,
+  };
+}
