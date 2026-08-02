@@ -5,4 +5,4 @@ Documentation
 node_modules/
 
 # Wrangler
-.wrangler
+.wrangler/
