@@ -1,7 +1,7 @@
 // services/httpService.js
 import { BASE, FLIX, _UA } from '../utils/constants.js';
+import { fetchWithTimeout, isCloudflareChallenge } from './upstreamFetch.js';
 
-// Realistic browser headers (same as before)
 const BROWSER_HEADERS = {
   'User-Agent': _UA,
   'Accept': 'application/json, text/plain, */*',
@@ -23,16 +23,32 @@ export async function _get(path, params = {}) {
   const url = new URL(path, base);
   Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
 
-  const response = await fetch(url.toString(), {
-    headers: BROWSER_HEADERS,
-  });
+  let response;
+  try {
+    response = await fetchWithTimeout(url.toString(), {
+      headers: BROWSER_HEADERS,
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('Upstream request timed out while contacting the media provider');
+    }
+    throw error;
+  }
 
   const contentType = response.headers.get('content-type') || '';
 
+  if (!response.ok) {
+    const text = await response.text();
+    if (isCloudflareChallenge(text, contentType, response.url)) {
+      throw new Error('Cloudflare challenge detected while reaching the upstream provider');
+    }
+    throw new Error(`Upstream request failed with ${response.status}: ${text.slice(0, 220)}`);
+  }
+
   if (contentType.includes('text/html')) {
     const html = await response.text();
-    if (html.includes('Just a moment') || html.includes('cf-error-details')) {
-      throw new Error('Cloudflare challenge detected');
+    if (isCloudflareChallenge(html, contentType, response.url)) {
+      throw new Error('Cloudflare challenge detected while reaching the upstream provider');
     }
     return html;
   }

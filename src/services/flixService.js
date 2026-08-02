@@ -2,13 +2,28 @@ import crypto from "node:crypto";
 import { FLIX, BASE, HEADERS } from "../utils/constants.js";
 import { rt, extractSsrObj } from "../utils/helpers.js";
 import { sha256hex, le, runWasm } from "../utils/cryptoUtils.js";
+import { fetchWithTimeout, isCloudflareChallenge } from "./upstreamFetch.js";
 
 export async function getStreamUrl(access_id, v = 2) {
-  const r = await fetch(`${FLIX}/e/${access_id}?v=${v}`, {
+  const r = await fetchWithTimeout(`${FLIX}/e/${access_id}?v=${v}`, {
     headers: { ...HEADERS, Referer: `${BASE}/` }
   });
-  if (!r.ok) throw { status: r.status, message: `Embed fetch failed: ${r.status}` };
-  return await decryptEmbed(await r.text());
+
+  const contentType = r.headers.get('content-type') || '';
+  if (!r.ok) {
+    const html = await r.text();
+    if (isCloudflareChallenge(html, contentType, r.url)) {
+      throw { status: 503, message: 'Cloudflare challenge detected while loading the embed page' };
+    }
+    throw { status: r.status, message: `Embed fetch failed: ${r.status}` };
+  }
+
+  const html = await r.text();
+  if (isCloudflareChallenge(html, contentType, r.url)) {
+    throw { status: 503, message: 'Cloudflare challenge detected while loading the embed page' };
+  }
+
+  return await decryptEmbed(html);
 }
 
 async function decryptEmbed(html) {
