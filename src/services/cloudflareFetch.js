@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer';
+import puppeteer, { executablePath } from 'puppeteer';
 
 /**
  * Fetches a URL that is protected by Cloudflare (with turnstile/challenge).
@@ -6,6 +6,7 @@ import puppeteer from 'puppeteer';
  */
 export async function fetchWithCloudflareBypass(url, options = {}) {
   const browser = await puppeteer.launch({
+    executablePath: '/opt/render/.cache/puppeteer/chrome/linux-151.0.7922.47/chrome-linux64/chrome',
     headless: 'new', // use new headless mode
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
