@@ -1,4 +1,10 @@
 import puppeteer, { executablePath } from 'puppeteer';
+import fs from 'fs';
+
+const path = await executablePath();
+
+console.log("Executable:", path);
+console.log("Exists:", fs.existsSync(path));
 
 /**
  * Fetches a URL that is protected by Cloudflare (with turnstile/challenge).
