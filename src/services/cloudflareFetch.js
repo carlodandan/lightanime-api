@@ -6,10 +6,13 @@ import puppeteer, { executablePath } from 'puppeteer';
  */
 export async function fetchWithCloudflareBypass(url, options = {}) {
   const browser = await puppeteer.launch({
-    executablePath: '/opt/render/.cache/puppeteer/chrome/linux-151.0.7922.47/chrome-linux64/chrome',
-    headless: 'new', // use new headless mode
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+    executablePath: executablePath(),
+    headless: true,
+    args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox'
+    ]
+});
 
   try {
     const page = await browser.newPage();
