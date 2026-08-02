@@ -3,3 +3,6 @@ Documentation
 
 # Ignore documentation files
 node_modules/
+
+# Wrangler
+.wrangler
