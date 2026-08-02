@@ -1,0 +1,9 @@
+name = "lightanime-api"
+main = "src/worker.js"
+compatibility_date = "2026-08-01"
+
+compatibility_flags = [ "nodejs_compat" ]
+
+[observability.logs]
+enabled = true
+invocation_logs = true

@@ -4,8 +4,7 @@ import { _get } from "../services/httpService.js";
 const ANIME_QUERY = `
   query ($id: Int) {
     Media(id: $id, type: ANIME) {
-      id
-      format
+      id format
       title { romaji english native }
       description
       coverImage { extraLarge large medium }
@@ -24,44 +23,30 @@ const ANIME_QUERY = `
       synonyms
       studios { nodes { name } }
       characters(sort: ROLE, perPage: 10) {
-        edges {
-          role
-          node {
-            id
-            name { full }
-            image { large }
-          }
-        }
+        edges { role node { id name { full } image { large } } }
       }
       staff(perPage: 10) {
-        edges {
-          role
-          node {
-            id
-            name { full }
-            image { large }
-          }
-        }
+        edges { role node { id name { full } image { large } } }
       }
     }
   }
 `;
 
-export async function getAnimeById(req, res) {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) return res.status(400).json({ detail: "Invalid ID" });
+export async function getAnimeById(c) {
+  const id = parseInt(c.req.param('id'));
+  if (isNaN(id)) return c.json({ detail: "Invalid ID" }, 400);
   const data = await fetchAnilistGraphQL(ANIME_QUERY, { id });
-  if (!data.Media) throw { status: 404, message: "Anime not found" };
-  res.json(data.Media);
+  if (!data.Media) return c.json({ detail: "Anime not found" }, 404);
+  return c.json(data.Media);
 }
 
-export async function getAnimeBySlug(req, res) {
-  const { slug } = req.params;
+export async function getAnimeBySlug(c) {
+  const slug = c.req.param('slug');
   const meta = await _get(`/api/v1/anime/${slug}/meta`);
   const anime = meta.anime || meta;
   const aid = getAnilistId(anime);
-  if (!aid) throw { status: 404, message: "Could not determine AniList ID for this slug" };
+  if (!aid) return c.json({ detail: "Could not determine AniList ID" }, 404);
   const data = await fetchAnilistGraphQL(ANIME_QUERY, { id: aid });
-  if (!data.Media) throw { status: 404, message: "Anime not found" };
-  res.json(data.Media);
+  if (!data.Media) return c.json({ detail: "Anime not found" }, 404);
+  return c.json(data.Media);
 }

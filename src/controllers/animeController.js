@@ -4,8 +4,7 @@ import { getAnilistId, fetchAnilistGraphQL } from "../services/anilistService.js
 const ANIME_QUERY = `
   query ($id: Int) {
     Media(id: $id, type: ANIME) {
-      id
-      format
+      id format
       title { romaji english native }
       description
       coverImage { extraLarge large medium }
@@ -24,102 +23,80 @@ const ANIME_QUERY = `
       synonyms
       studios { nodes { name } }
       characters(sort: ROLE, perPage: 10) {
-        edges {
-          role
-          node {
-            id
-            name { full }
-            image { large }
-          }
-        }
+        edges { role node { id name { full } image { large } } }
       }
       staff(perPage: 10) {
-        edges {
-          role
-          node {
-            id
-            name { full }
-            image { large }
-          }
-        }
+        edges { role node { id name { full } image { large } } }
       }
     }
   }
 `;
 
-export async function search(req, res) {
-  const { q, limit = 20, offset = 0 } = req.query;
-  if (!q) return res.status(400).json({ detail: "Query 'q' is required" });
-  res.json(await _get("/api/v1/search", { q, limit, offset }));
+export async function search(c) {
+  const { q, limit = 20, offset = 0 } = c.req.query();
+  if (!q) return c.json({ detail: "Query 'q' is required" }, 400);
+  const data = await _get("/api/v1/search", { q, limit, offset });
+  return c.json(data);
 }
 
-export async function home(req, res) {
-  res.json(await _get("/api/v1/home", { limit: req.query.limit || 20 }));
+export async function home(c) {
+  const limit = c.req.query('limit') || 20;
+  const data = await _get("/api/v1/home", { limit });
+  return c.json(data);
 }
 
-export async function top(req, res) {
-  const { period = "week", limit = 10 } = req.query;
-  res.json(await _get("/api/v1/top/anime", { period, limit }));
+export async function top(c) {
+  const { period = "week", limit = 10 } = c.req.query();
+  const data = await _get("/api/v1/top/anime", { period, limit });
+  return c.json(data);
 }
 
-export async function schedule(req, res) {
+export async function schedule(c) {
   const now = new Date();
   const defaultYear = now.getFullYear().toString();
   const defaultMonth = (now.getMonth() + 1).toString();
   const defaultTz = "Asia/Manila";
-  const { tz = defaultTz, year = defaultYear, month = defaultMonth } = req.query;
-  res.json(await _get("/api/v1/schedule", { tz, year, month }));
+  const { tz = defaultTz, year = defaultYear, month = defaultMonth } = c.req.query();
+  const data = await _get("/api/v1/schedule", { tz, year, month });
+  return c.json(data);
 }
 
-export async function info(req, res) {
-  const { slug } = req.params;
-
-  // 1. Fetch metadata and episodes in parallel
+export async function info(c) {
+  const slug = c.req.param('slug');
   const [meta, eps] = await Promise.all([
     _get(`/api/v1/anime/${slug}/meta`),
     _get(`/api/v1/anime/${slug}/episodes`, { limit: 2000 })
   ]);
-
   const anime = meta.anime || meta;
   const ep_list = Array.isArray(eps) ? eps : (eps.data || eps.episodes || []);
   const anilist_id = getAnilistId(anime);
-
-  // Build the base response
-  const response = {
-    ...anime,
-    episodes: ep_list,
-    anilist_id,
-  };
-
-  // 2. If we have an AniList ID, fetch additional details
+  const response = { ...anime, episodes: ep_list, anilist_id };
   if (anilist_id) {
     try {
       const data = await fetchAnilistGraphQL(ANIME_QUERY, { id: anilist_id });
-      if (data.Media) {
-        // Merge the AniList data into the response
-        response.anilist = data.Media;
-      }
+      if (data.Media) response.anilist = data.Media;
     } catch (err) {
-      // Log error but don't fail the request – we still have basic info
-      console.warn(`Failed to fetch AniList details for ${slug}:`, err.message);
+      console.warn(`AniList failed for ${slug}:`, err.message);
     }
   }
-
-  res.json(response);
+  return c.json(response);
 }
 
-export async function episodes(req, res) {
-  const { slug } = req.params;
-  const data = await _get(`/api/v1/anime/${slug}/episodes`, { limit: req.query.limit || 2000 });
-  res.json(Array.isArray(data) ? data : (data.data || data.episodes || data));
+export async function episodes(c) {
+  const slug = c.req.param('slug');
+  const limit = c.req.query('limit') || 2000;
+  const data = await _get(`/api/v1/anime/${slug}/episodes`, { limit });
+  return c.json(Array.isArray(data) ? data : (data.data || data.episodes || data));
 }
 
-export async function recommendations(req, res) {
-  const { slug } = req.params;
-  res.json(await _get(`/api/v1/anime/${slug}/recommendations`));
+export async function recommendations(c) {
+  const slug = c.req.param('slug');
+  const data = await _get(`/api/v1/anime/${slug}/recommendations`);
+  return c.json(data);
 }
 
-export async function thumbnails(req, res) {
-  const { anilist_id } = req.params;
-  res.json(await _get(`/api/thumbnails/${anilist_id}`));
+export async function thumbnails(c) {
+  const anilist_id = c.req.param('anilist_id');
+  const data = await _get(`/api/thumbnails/${anilist_id}`);
+  return c.json(data);
 }

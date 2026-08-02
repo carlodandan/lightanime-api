@@ -6,7 +6,7 @@ export async function fetchAnilistGraphQL(query, variables) {
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'User-Agent': 'LightAnime/1.0 (via Express)',
+      'User-Agent': 'LightAnime/1.0 (via Worker)',
     },
     body: JSON.stringify({ query, variables }),
   });
