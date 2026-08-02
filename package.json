@@ -5,7 +5,8 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "start": "npx puppeteer browsers install chrome && node ./src/index.js",
+    "build": "npx puppeteer browsers install chrome",
+    "start": "node ./src/index.js",
     "dev": "nodemon ./src/index.js"
   },
   "keywords": [],
