@@ -1,13 +1,13 @@
-import { Router } from "express";
-import { asyncHandler } from "../middlewares/asyncHandler.js";
-import { fetchServers } from "../controllers/serversController.js";
+import { Hono } from 'hono';
+import { asyncHandler } from '../middlewares/asyncHandler.js';
+import { fetchServers } from '../controllers/serversController.js';
 
-const router = Router();
+const router = new Hono();
 
-router.get("/:slug/:episode", asyncHandler(async (req, res) => {
-  const { slug, episode } = req.params;
-  const anilist_id = req.query.anilist_id ? parseInt(req.query.anilist_id, 10) : null;
-  res.json(await fetchServers(slug, episode, anilist_id));
+router.get('/:slug/:episode', asyncHandler(async (c) => {
+  const { slug, episode } = c.req.param();
+  const anilist_id = parseInt(c.req.query('anilist_id')) || null;
+  return c.json(await fetchServers(slug, episode, anilist_id));
 }));
 
 export default router;

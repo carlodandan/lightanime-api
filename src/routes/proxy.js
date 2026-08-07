@@ -1,10 +1,10 @@
-import { Router } from "express";
-import { asyncHandler } from "../middlewares/asyncHandler.js";
-import { proxyManifest, proxySegment } from "../controllers/proxyController.js";
+import { Hono } from 'hono';
+import { asyncHandler } from '../middlewares/asyncHandler.js';
+import { proxyManifest, proxySegment } from '../controllers/proxyController.js';
 
-const router = Router();
+const router = new Hono();
 
-router.get("/manifest", asyncHandler(proxyManifest));
-router.get("/segment", asyncHandler(proxySegment));
+router.get('/manifest', asyncHandler(proxyManifest));
+router.get('/segment', asyncHandler(proxySegment));
 
 export default router;

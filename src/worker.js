@@ -1,45 +1,69 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
-// Import all controllers
-import * as anime from './controllers/animeController.js';
-import * as stream from './controllers/streamController.js';
-import * as proxy from './controllers/proxyController.js';
-import * as anilist from './controllers/anilistController.js';
+import { search, home, top, schedule, info, episodes, recommendations, thumbnails } from './controllers/animeController.js';
+import { getStream, fromLink } from './controllers/streamController.js';
+import { proxyManifest, proxySegment } from './controllers/proxyController.js';
+import { getAnimeById, getAnimeBySlug } from './controllers/anilistController.js';
 import { fetchServers } from './controllers/serversController.js';
 
 const app = new Hono();
 
-// Global error handler
+app.use(
+  '*',
+  cors({
+    origin: '*',
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+  }),
+);
+
 app.onError((err, c) => {
   console.error('Unhandled error:', err);
   return c.json({ detail: err.message || 'Internal Server Error' }, 500);
 });
 
-// CORS
-app.use('*', cors());
+app.get('/', (c) =>
+  c.json({
+    status: 'ok',
+    endpoints: {
+      search: 'GET /search?q=...&limit=20',
+      home: 'GET /home?limit=20',
+      top: 'GET /top?period=today|week|month&limit=10',
+      schedule: 'GET /schedule?tz=Asia/Manila&year=2026&month=7',
+      info: 'GET /info/:slug',
+      episodes: 'GET /episodes/:slug',
+      servers: 'GET /servers/:slug/:episode?anilist_id=...',
+      stream: 'GET /stream/:access_id?v=2',
+      stream_link: 'GET /stream/from-link?link={flixcloud_url}',
+      thumbnails: 'GET /thumbnails/:anilist_id',
+      recommendations: 'GET /recommendations/:slug',
+      anilist_anime: 'GET /anilist/anime/:id',
+      anilist_anime_by_slug: 'GET /anilist/anime/slug/:slug',
+    },
+  }),
+);
 
-// Routes (same as before)
-app.get('/', (c) => c.json({ status: 'ok', endpoints: { /* ... */ } }));
-app.get('/search', anime.search);
-app.get('/home', anime.home);
-app.get('/top', anime.top);
-app.get('/schedule', anime.schedule);
-app.get('/info/:slug', anime.info);
-app.get('/episodes/:slug', anime.episodes);
-app.get('/recommendations/:slug', anime.recommendations);
-app.get('/thumbnails/:anilist_id', anime.thumbnails);
+app.get('/search', search);
+app.get('/home', home);
+app.get('/top', top);
+app.get('/schedule', schedule);
+app.get('/info/:slug', info);
+app.get('/episodes/:slug', episodes);
+app.get('/recommendations/:slug', recommendations);
+app.get('/thumbnails/:anilist_id', thumbnails);
+
 app.get('/servers/:slug/:episode', async (c) => {
   const { slug, episode } = c.req.param();
   const anilist_id = parseInt(c.req.query('anilist_id')) || null;
-  const data = await fetchServers(slug, episode, anilist_id);
-  return c.json(data);
+  return c.json(await fetchServers(slug, episode, anilist_id));
 });
-app.get('/stream/:access_id', stream.getStream);
-app.get('/stream/from-link', stream.fromLink);
-app.get('/api/proxy/manifest', proxy.proxyManifest);
-app.get('/api/proxy/segment', proxy.proxySegment);
-app.get('/anilist/anime/:id', anilist.getAnimeById);
-app.get('/anilist/anime/slug/:slug', anilist.getAnimeBySlug);
+
+app.get('/stream/:access_id', getStream);
+app.get('/stream/from-link', fromLink);
+app.get('/api/proxy/manifest', proxyManifest);
+app.get('/api/proxy/segment', proxySegment);
+app.get('/anilist/anime/:id', getAnimeById);
+app.get('/anilist/anime/slug/:slug', getAnimeBySlug);
 
 export default app;
