@@ -2,11 +2,18 @@
 
 // Decode base64 to Uint8Array (works in Workers)
 export function rt(b64) {
+  if (!b64 || typeof b64 !== "string") {
+    throw new Error("Expected Base64 string");
+  }
+
   const binary = atob(b64);
+
   const bytes = new Uint8Array(binary.length);
+
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
+
   return bytes;
 }
 

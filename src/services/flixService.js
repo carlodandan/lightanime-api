@@ -22,17 +22,48 @@ async function le(seed) {
 // runWasm – unchanged (uses WebAssembly API)
 async function runWasm(wasmB64, frag1, kf2, T_bytes, seedInt) {
   const wasmBytes = rt(wasmB64);
+
   const { instance } = await WebAssembly.instantiate(wasmBytes);
+
   const { _s, _r, memory } = instance.exports;
-  const h = new Uint8Array(memory.buffer);
+
+  if (typeof _s !== "function") {
+    throw new Error("WASM export _s is missing");
+  }
+
+  if (typeof _r !== "function") {
+    throw new Error("WASM export _r is missing");
+  }
+
+  if (!(memory instanceof WebAssembly.Memory)) {
+    throw new Error("WASM memory export is missing");
+  }
+
   const len = frag1.length;
-  const [y, v, T, out] = [1000, 1000 + len, 1000 + 2 * len, 1000 + 3 * len];
+
+  const y = 1000;
+  const v = y + len;
+  const T = v + len;
+  const out = T + len;
+
+  const required = out + len;
+
+  if (memory.buffer.byteLength < required) {
+    throw new Error(
+      `WASM memory too small: ${memory.buffer.byteLength} < ${required}`
+    );
+  }
+
+  const h = new Uint8Array(memory.buffer);
+
   h.set(frag1, y);
   h.set(kf2, v);
   h.set(T_bytes, T);
+
   _s(seedInt);
   _r(y, v, T, out, len);
-  return h.subarray(out, out + len);
+
+  return h.slice(out, out + len);
 }
 
 // Main decryption
