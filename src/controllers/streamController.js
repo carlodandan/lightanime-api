@@ -5,6 +5,7 @@
  */
 export async function getStream(c) {
   const { NODE_BACKEND_URL, NODE_API_KEY } = c.env;
+  console.log('Backend URL:', NODE_BACKEND_URL);
 
   if (!NODE_BACKEND_URL) {
     console.error('NODE_BACKEND_URL not set');
