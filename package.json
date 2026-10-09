@@ -1,14 +1,20 @@
 {
-  "name": "all-api",
+  "name": "lightanime-api",
   "version": "2.3.0",
   "type": "module",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "dev:cf": "wrangler dev --port 4000",
+    "deploy": "wrangler deploy",
+    "test": "node test/test-all.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
-    "playwright-core": "^1.63.0",
     "wreq-js": "^3.2.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.149.0"
   }
 }

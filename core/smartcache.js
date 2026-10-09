@@ -1,6 +1,16 @@
-// Reads process.env safely — process may be undefined/limited on edge runtimes.
+let runtimeEnv = null;
+
+export function setRuntimeEnv(env) {
+  if (env && typeof env === "object") {
+    runtimeEnv = env;
+    _CACHE_ENABLED = envBool("CACHE_ENABLED", false);
+  }
+}
+
+// Reads env vars from active Worker env or process.env safely
 function readEnv(name) {
   try {
+    if (runtimeEnv?.[name] !== undefined) return runtimeEnv[name];
     return typeof process !== "undefined" ? process.env?.[name] : undefined;
   } catch { return undefined; }
 }
@@ -17,26 +27,37 @@ function envInt(name, fallback) {
   return raw !== undefined && raw !== "" && Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-// change CACHE_ENABLED=true in .env and set your upstash credentials to enable caching
-export const _CACHE_ENABLED = envBool("CACHE_ENABLED", false);
+export let _CACHE_ENABLED = envBool("CACHE_ENABLED", false);
+
+export function isCacheEnabled() {
+  return envBool("CACHE_ENABLED", false);
+}
 
 const IS_LOCAL_NODE = (() => {
   try {
     return (
       typeof process !== "undefined" &&
       typeof process.versions?.node === "string" &&
-      !process.env.VERCEL
+      !process.env.VERCEL &&
+      !process.env.CF_PAGES &&
+      typeof navigator === "undefined"
     );
   } catch { return false; }
 })();
 
-const UPSTASH_REDIS_REST_URL = readEnv("UPSTASH_REDIS_REST_URL") ?? ""; //get it from upstash.com
-const UPSTASH_REDIS_REST_TOKEN = readEnv("UPSTASH_REDIS_REST_TOKEN") ?? "";
-const REDIS_ENABLED = Boolean(UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN);
+function getUpstashCredentials() {
+  const url = readEnv("UPSTASH_REDIS_REST_URL") ?? "";
+  const token = readEnv("UPSTASH_REDIS_REST_TOKEN") ?? "";
+  return { url, token, enabled: Boolean(url && token) };
+}
 
-// DEFAULT_REDIS_TTL is in seconds (default 900s / 15min) — used as the fallback expiry
-// for Redis writes that don't carry their own computed ttl (see redisWrite below).
-const REDIS_TTL_MS = envInt("DEFAULT_REDIS_TTL", 900) * 1000;
+function getKV() {
+  return runtimeEnv?.CACHE_KV ?? runtimeEnv?.KV ?? null;
+}
+
+function getRedisTtlMs() {
+  return envInt("DEFAULT_REDIS_TTL", 900) * 1000;
+}
 
 function encodeEntry(entry) {
   return JSON.stringify(entry, (_, value) => value === Infinity ? "__Infinity__" : value);
@@ -47,11 +68,12 @@ function decodeEntry(raw) {
 }
 
 async function redisCommand(command) {
-  if (!REDIS_ENABLED || typeof fetch !== "function") return null;
-  const res = await fetch(UPSTASH_REDIS_REST_URL, {
+  const creds = getUpstashCredentials();
+  if (!creds.enabled || typeof fetch !== "function") return null;
+  const res = await fetch(creds.url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}`,
+      Authorization: `Bearer ${creds.token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(command),
@@ -62,44 +84,54 @@ async function redisCommand(command) {
 }
 
 async function redisWrite(key, entry) {
-  if (!REDIS_ENABLED) return;
+  const creds = getUpstashCredentials();
+  if (!creds.enabled) return;
   const value = encodeEntry(entry);
-  const ttlMs = Number.isFinite(entry.ttl) && entry.ttl > 0 ? entry.ttl : REDIS_TTL_MS;
+  const ttlMs = Number.isFinite(entry.ttl) && entry.ttl > 0 ? entry.ttl : getRedisTtlMs();
   await redisCommand(["SET", key, value, "PX", Math.ceil(ttlMs)]);
 }
 
+let diskInitialized = false;
 let diskRead  = () => null;
 let diskWrite = () => {};
 let diskDel   = () => {};
 
+async function initDisk() {
+  if (diskInitialized || !IS_LOCAL_NODE) return;
+  diskInitialized = true;
+  try {
+    const fs = await import("node:fs");
+    const fsp = await import("node:fs/promises");
+    const path = await import("node:path");
+    const url = await import("node:url");
+
+    const __dir = path.dirname(url.fileURLToPath(import.meta.url));
+    const CACHE_DIR = path.join(__dir, ".cache");
+    try { fs.mkdirSync(CACHE_DIR, { recursive: true }); } catch {}
+
+    const keyToPath = (key) =>
+      path.join(CACHE_DIR, key.replace(/[^a-zA-Z0-9_-]/g, "_") + ".json");
+
+    diskRead = (key) => {
+      try {
+        const p = keyToPath(key);
+        if (!fs.existsSync(p)) return null;
+        return decodeEntry(fs.readFileSync(p, "utf8"));
+      } catch { return null; }
+    };
+
+    diskWrite = (key, entry) => {
+      fsp.writeFile(keyToPath(key), encodeEntry(entry)).catch(() => {});
+    };
+
+    diskDel = (key) => {
+      fsp.unlink(keyToPath(key)).catch(() => {});
+    };
+  } catch {}
+}
+
 if (IS_LOCAL_NODE) {
-  const { readFileSync, mkdirSync, existsSync } = await import("node:fs");
-  const { writeFile, unlink }                   = await import("node:fs/promises");
-  const { join, dirname }                        = await import("node:path");
-  const { fileURLToPath }                        = await import("node:url");
-
-  const __dir    = dirname(fileURLToPath(import.meta.url));
-  const CACHE_DIR = join(__dir, ".cache");
-  try { mkdirSync(CACHE_DIR, { recursive: true }); } catch {}
-
-  const keyToPath = (key) =>
-    join(CACHE_DIR, key.replace(/[^a-zA-Z0-9_-]/g, "_") + ".json");
-
-  diskRead = (key) => {
-    try {
-      const p = keyToPath(key);
-      if (!existsSync(p)) return null;
-      return decodeEntry(readFileSync(p, "utf8"));
-    } catch { return null; }
-  };
-
-  diskWrite = (key, entry) => {
-    writeFile(keyToPath(key), encodeEntry(entry)).catch(() => {});
-  };
-
-  diskDel = (key) => {
-    unlink(keyToPath(key)).catch(() => {});
-  };
+  initDisk().catch(() => {});
 }
 
 const MAX_MEM = 800;
@@ -116,7 +148,7 @@ function evict() {
 }
 
 export function get(key) {
-  if (!_CACHE_ENABLED) return null;
+  if (!isCacheEnabled()) return null;
   let e = mem.get(key);
   if (e) return e;
 
@@ -129,10 +161,29 @@ export function get(key) {
 }
 
 export async function getAsync(key) {
-  if (!_CACHE_ENABLED) return null;
+  if (!isCacheEnabled()) return null;
   let e = get(key);
   if (e) return e;
 
+  // Check Cloudflare Workers KV
+  const kv = getKV();
+  if (kv) {
+    try {
+      const raw = await kv.get(key);
+      if (raw) {
+        e = typeof raw === "string" ? decodeEntry(raw) : raw;
+        if (!isFresh(e)) {
+          kv.delete(key).catch(() => {});
+        } else {
+          mem.set(key, e);
+          evict();
+          return e;
+        }
+      }
+    } catch {}
+  }
+
+  // Check Upstash Redis
   const raw = await redisCommand(["GET", key]);
   if (!raw) return null;
 
@@ -168,15 +219,26 @@ function setLocal(key, data, ttlMs, refreshAfterMs) {
 }
 
 export function set(key, data, ttlMs, refreshAfterMs) {
-  if (!_CACHE_ENABLED) return { data, cachedAt: Date.now(), ttl: ttlMs, refreshAfter: refreshAfterMs ?? ttlMs, expiresAt: Date.now() + ttlMs };
+  if (!isCacheEnabled()) return { data, cachedAt: Date.now(), ttl: ttlMs, refreshAfter: refreshAfterMs ?? ttlMs, expiresAt: Date.now() + ttlMs };
   const entry = setLocal(key, data, ttlMs, refreshAfterMs);
   redisWrite(key, entry).catch(() => {});
   return entry;
 }
 
 export async function setAsync(key, data, ttlMs, refreshAfterMs) {
-  if (!_CACHE_ENABLED) return { data, cachedAt: Date.now(), ttl: ttlMs, refreshAfter: refreshAfterMs ?? ttlMs, expiresAt: Date.now() + ttlMs };
+  if (!isCacheEnabled()) return { data, cachedAt: Date.now(), ttl: ttlMs, refreshAfter: refreshAfterMs ?? ttlMs, expiresAt: Date.now() + ttlMs };
   const entry = setLocal(key, data, ttlMs, refreshAfterMs);
+
+  // Write to Cloudflare Workers KV if bound
+  const kv = getKV();
+  if (kv) {
+    try {
+      const val = encodeEntry(entry);
+      const expTtl = Math.max(60, Math.ceil(ttlMs / 1000));
+      await kv.put(key, val, { expirationTtl: expTtl }).catch(() => {});
+    } catch {}
+  }
+
   await redisWrite(key, entry);
   return entry;
 }
@@ -196,11 +258,15 @@ function delLocal(key) {
 
 export function del(key) {
   delLocal(key);
+  const kv = getKV();
+  if (kv) kv.delete(key).catch(() => {});
   redisCommand(["DEL", key]).catch(() => {});
 }
 
 export async function delAsync(key) {
   delLocal(key);
+  const kv = getKV();
+  if (kv) await kv.delete(key).catch(() => {});
   await redisCommand(["DEL", key]);
 }
 
@@ -212,6 +278,15 @@ export function delByPrefix(prefix) {
 
 export async function delByPrefixAsync(prefix) {
   delByPrefix(prefix);
+  const kv = getKV();
+  if (kv && typeof kv.list === "function") {
+    try {
+      const list = await kv.list({ prefix });
+      if (Array.isArray(list?.keys)) {
+        await Promise.all(list.keys.map((k) => kv.delete(k.name).catch(() => {})));
+      }
+    } catch {}
+  }
   const keys = await redisCommand(["KEYS", `${prefix}*`]);
   if (Array.isArray(keys) && keys.length) {
     await redisCommand(["DEL", ...keys]);

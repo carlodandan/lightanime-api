@@ -14,7 +14,9 @@ import animeonsenHandler           from "./providers/animeonsen.js";
 import anipmHandler                from "./providers/anipm.js";
 import { getEpisodesResponse, getFilteredEpisodesResponse } from "./core/episode-cache.js";
 import { resolveProviders }         from "./core/episode-strategy.js";
-import { getAsync, setAsync, isFresh, mapTTL, WATCH_TTL, _CACHE_ENABLED } from "./core/smartcache.js";
+import { getAsync, setAsync, isFresh, mapTTL, WATCH_TTL, _CACHE_ENABLED, setRuntimeEnv, isCacheEnabled } from "./core/smartcache.js";
+import { getStaticAsset }           from "./docs/static-assets.js";
+import { handleM3u8Proxy }          from "./core/m3u8-proxy.js";
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
@@ -64,9 +66,22 @@ async function cachedWatch(cacheKey, handlerFn, ttl = WATCH_TTL) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env = {}, ctx) {
+    setRuntimeEnv(env);
+
+    const workerEnv = {
+      ...env,
+      context: ctx || (env?.waitUntil ? env : undefined),
+      waitUntil: (p) => {
+        if (typeof ctx?.waitUntil === "function") ctx.waitUntil(p);
+        else if (typeof env?.waitUntil === "function") env.waitUntil(p);
+        else p.catch(() => {});
+      },
+    };
+
     const url  = new URL(request.url);
     const path = url.pathname;
+    const apiVersion = env?.API_VERSION ?? "2.3";
 
     if (request.method === "OPTIONS") {
       return new Response(null, {
@@ -77,6 +92,37 @@ export default {
           "Access-Control-Allow-Headers": "*",
         },
       });
+    }
+
+    if (path === "/m3u8-proxy" || path === "/m3u8-proxy/") {
+      return handleM3u8Proxy(request);
+    }
+
+    if (request.method === "GET") {
+      const staticAsset = getStaticAsset(path, apiVersion);
+      if (staticAsset) {
+        return new Response(staticAsset.body, {
+          headers: {
+            "Content-Type": staticAsset.mime,
+            "Cache-Control": "public, max-age=3600",
+          },
+        });
+      }
+
+      if (path === "/" || path === "") {
+        const accept = request.headers.get("accept") || "";
+        if (accept.includes("text/html")) {
+          const landing = getStaticAsset("/landing", apiVersion);
+          if (landing) {
+            return new Response(landing.body, {
+              headers: {
+                "Content-Type": landing.mime,
+                "Cache-Control": "public, max-age=3600",
+              },
+            });
+          }
+        }
+      }
     }
 
     let m = path.match(/^\/map\/(\d+)\/?$/);
@@ -123,7 +169,7 @@ export default {
     if (m) {
       const anilistId = m[1];
       try {
-        return json(await getEpisodesResponse(anilistId, env));
+        return json(await getEpisodesResponse(anilistId, workerEnv));
       } catch (e) {
         return json({ error: e.message }, 500);
       }
@@ -253,8 +299,8 @@ export default {
     if (path.startsWith("/watch/")) return json({ error: "Not found" }, 404);
 
     return json({
-      name: `Anivexa API ${env?.API_VERSION ?? "unknown"}`,
-      cache: _CACHE_ENABLED,
+      name: `Anivexa API ${apiVersion}`,
+      cache: isCacheEnabled(),
       providers: [
         "mkissa",
         "reanime",

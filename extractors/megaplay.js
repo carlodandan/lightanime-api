@@ -123,12 +123,15 @@ function getMegaPlaySigningKey(script) {
   try {
     const context = { console, decodeURI, encodeURI, Math, String, Array, Object, RegExp, Error, SyntaxError };
     context.globalThis = context;
-    vm.runInNewContext(
-      `${script.slice(0, entry.index)};globalThis.__megaPlaySigningKey=${keyExpression};`,
-      context,
-      { timeout: 5000 }
-    );
-    return typeof context.__megaPlaySigningKey === "string" ? context.__megaPlaySigningKey : null;
+    if (typeof vm?.runInNewContext === "function") {
+      vm.runInNewContext(
+        `${script.slice(0, entry.index)};globalThis.__megaPlaySigningKey=${keyExpression};`,
+        context,
+        { timeout: 5000 }
+      );
+      return typeof context.__megaPlaySigningKey === "string" ? context.__megaPlaySigningKey : null;
+    }
+    return null;
   } catch {
     return null;
   }
