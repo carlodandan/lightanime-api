@@ -313,15 +313,19 @@ export async function findTopSlugs(titles, searchFn, n = 6) {
 }
 
 async function anilistQuery(query, variables) {
-  const res = await fetch("https://graphql.anilist.co", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) throw new Error(`AniList HTTP ${res.status}`);
-  const json = await res.json();
-  if (json.errors?.length) throw new Error(`AniList: ${json.errors[0].message}`);
-  return json.data;
+  try {
+    const res = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function computePrequelOffset(relations, depth = 0) {
