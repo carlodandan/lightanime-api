@@ -94,6 +94,14 @@ export default {
       });
     }
 
+    // Verify request: If INTERNAL_API_SECRET is configured, require either valid secret or service-binding
+    const internalSecret = env?.INTERNAL_API_SECRET;
+    const clientSecret = request.headers.get("x-internal-secret");
+    const isServiceBinding = request.headers.get("x-service-binding") === "aenime-internal";
+    if (internalSecret && clientSecret !== internalSecret && !isServiceBinding) {
+      return json({ error: "Unauthorized access: Private API" }, 403);
+    }
+
     if (path === "/m3u8-proxy" || path === "/m3u8-proxy/") {
       return handleM3u8Proxy(request);
     }
