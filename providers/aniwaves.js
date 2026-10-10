@@ -39,7 +39,7 @@ function formatName(value) {
 }
 
 function searchQueries(titles) {
-  return buildTitleSearchQueries(titles, 20);
+  return buildTitleSearchQueries(titles, 3);
 }
 
 async function fetchText(url, headers = {}) {
@@ -192,7 +192,7 @@ async function resolveSeries(anilistId, ctx = {}) {
     .map((candidate) => ({ candidate, score: candidateTitleScore(titles, candidate) }))
     .filter((item) => item.score >= 0.5)
     .sort((left, right) => right.score - left.score)
-    .slice(0, 12)
+    .slice(0, 4)
     .map((item) => item.candidate);
   const details = await Promise.all(shortlist.map((candidate) => fetchDetail(candidate).catch(() => null)));
   const valid = details
@@ -202,7 +202,7 @@ async function resolveSeries(anilistId, ctx = {}) {
     .sort((left, right) => right.score - left.score);
   const selected = valid[0];
   const runnerUp = valid[1];
-  if (!selected || (selected.score < 0.82 && !selected.partOrdinal) || (runnerUp && selected.score - runnerUp.score < 0.08)) {
+  if (!selected || (selected.score < 0.75 && !selected.partOrdinal) || (runnerUp && selected.score < 0.85 && selected.score - runnerUp.score < 0.04)) {
     throw new Error(`AniWaves match not confident for AniList ${anilistId}`);
   }
   const data = {

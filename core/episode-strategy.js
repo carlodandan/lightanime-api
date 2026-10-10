@@ -137,7 +137,7 @@ export async function buildEpisodesWithCache(anilistId, media, anizip) {
   const fns = providerFns(anilistId, status, ctx);
 
   // Primary reliable providers that provide full episodes and streams
-  const primaryProviders = ["reanime", "kaa", "anikoto"];
+  const primaryProviders = ["kaa", "anikoto", "aniwaves"];
   const primaryPairs = await Promise.all(
     primaryProviders.map(async (name) => {
       const result = await safe(name, fns[name]);
@@ -148,7 +148,7 @@ export async function buildEpisodesWithCache(anilistId, media, anizip) {
   const result = Object.fromEntries(primaryPairs);
 
   // Populate secondary providers gracefully so schema remains 100% backward compatible
-  for (const name of ["anizone", "aniwaves", "mkissa", "animegg", "animenosub", "senshi", "animedunya", "animeonsen", "anipm"]) {
+  for (const name of ["reanime", "anizone", "mkissa", "animegg", "animenosub", "senshi", "animedunya", "animeonsen", "anipm"]) {
     result[name] = { error: `Provider ${name} available via /episodes/${name}/${anilistId}` };
   }
 
