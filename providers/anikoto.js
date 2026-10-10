@@ -150,26 +150,22 @@ async function inspectAnikotoCandidate(candidate) {
 async function findAnikotoShow(media, anizip) {
   const mappings = anizip ?? await getJSON(`${ANIZIP}?anilist_id=${media.id}`).catch(() => null);
   const titles = [...new Set(buildTitles(media, mappings).filter(Boolean))];
-  const keywords = buildTitleSearchQueries(titles, 18);
+  const keywords = buildTitleSearchQueries(titles, 3);
   const allCandidatesMap = new Map();
-  for (let index = 0; index < keywords.length; index += 4) {
-    const results = await Promise.all(keywords.slice(index, index + 4).map((keyword) => searchAnikoto(keyword).catch(() => [])));
-    for (const list of results) for (const candidate of list) allCandidatesMap.set(candidate.slug, candidate);
-  }
+  const results = await Promise.all(keywords.map((keyword) => searchAnikoto(keyword).catch(() => [])));
+  for (const list of results) for (const candidate of list) allCandidatesMap.set(candidate.slug, candidate);
 
   const candidates = [...allCandidatesMap.values()].map((candidate) => {
     const titleScore = titleIdentityScore(titles, [candidate.name, candidate.jp, candidate.slug.replace(/-/g, " ")]);
     return { ...candidate, titleScore, legacyScore: scoreCandidate(candidate, media.title?.english, media.title?.romaji, media.synonyms || []) };
   }).filter((candidate) => candidate.titleScore >= 0.28)
     .sort((left, right) => right.titleScore - left.titleScore || right.legacyScore - left.legacyScore)
-    .slice(0, 12);
+    .slice(0, 3);
 
   if (!candidates.length) throw new Error(`No confident Anikoto title candidates for AniList ${media.id}`);
   const inspected = [];
-  for (let index = 0; index < candidates.length; index += 4) {
-    const batch = await Promise.allSettled(candidates.slice(index, index + 4).map(inspectAnikotoCandidate));
-    for (const result of batch) if (result.status === "fulfilled" && result.value) inspected.push(result.value);
-  }
+  const batch = await Promise.allSettled(candidates.map(inspectAnikotoCandidate));
+  for (const result of batch) if (result.status === "fulfilled" && result.value) inspected.push(result.value);
 
   const expectedMal = Number(media.idMal) || null;
   if (expectedMal) {

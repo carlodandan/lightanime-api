@@ -44,7 +44,7 @@ async function resolveSeries(anilistId, ctx = {}) {
 
   const media = ctx.media ?? await getMedia(anilistId);
   const malId = media?.idMal ?? null;
-  const queries = buildTitleSearchQueries(buildTitles(media, ctx.anizip), 16);
+  const queries = buildTitleSearchQueries(buildTitles(media, ctx.anizip), 3);
   const searchRequests = queries.map((query) => searchReanime(query));
   if (media?.genres?.includes("Hentai")) {
     searchRequests.push(...queries.map((query) => searchReanime(query, "Hentai")));

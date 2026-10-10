@@ -6,3 +6,4 @@ extractors/babastream.js
 local-only-providers/
 providers/anihq.js
 extractors/voe.js
+.wrangler/

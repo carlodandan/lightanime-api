@@ -1,4 +1,3 @@
-import child_process from "node:child_process";
 import { json, episodeMeta } from "../core/new-provider-utils.js";
 import { getMedia } from "../core/anilist.js";
 import { get as cacheGet, set as cacheSet, isFresh, SHOW_IDENTITY_TTL } from "../core/smartcache.js";
@@ -17,9 +16,30 @@ async function resolveMalId(anilistId) {
   return media.idMal;
 }
 
-function fetchHtml(url) {
-  const cmd = `curl -s -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" -H "Accept-Language: en-US,en;q=0.9" "${url}"`;
-  return child_process.execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+async function fetchHtml(url) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      redirect: "follow",
+    });
+    if (res.ok) return await res.text();
+  } catch {}
+
+  // Local Node.js fallback via dynamic import if direct fetch was blocked
+  if (typeof process !== "undefined" && process.versions?.node) {
+    try {
+      const cp = await import("node:child_process");
+      if (typeof cp?.execSync === "function") {
+        const cmd = `curl -s -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" -H "Accept-Language: en-US,en;q=0.9" "${url}"`;
+        return cp.execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+      }
+    } catch {}
+  }
+  return "";
 }
 
 function extractEpisodesList(html) {
@@ -79,7 +99,7 @@ function extractStream(html) {
 
 export async function getEpisodes(anilistId, ctx = {}) {
   const malId = await resolveMalId(anilistId);
-  const html = fetchHtml(`${BASE}/en/anime/${malId}`);
+  const html = await fetchHtml(`${BASE}/en/anime/${malId}`);
   if (!html) throw new Error("AnimeDunya: episodes fetch failed");
 
   let cdnBase = "https://cdn.anime-dunya.com/thumbnail/";
@@ -129,7 +149,7 @@ export async function getEpisodes(anilistId, ctx = {}) {
 
 async function handleWatch(anilistId, audio, epNum) {
   const malId = await resolveMalId(anilistId);
-  const html = fetchHtml(`${BASE}/en/play/${malId}/${epNum}`);
+  const html = await fetchHtml(`${BASE}/en/play/${malId}/${epNum}`);
   if (!html) return json({ error: "AnimeDunya watch fetch failed" }, 500);
 
   const streamData = extractStream(html);

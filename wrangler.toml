@@ -1,0 +1,34 @@
+name = "lightanime-api"
+main = "index.js"
+compatibility_date = "2026-10-08"
+compatibility_flags = ["nodejs_compat"]
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
+persist = true
+
+[observability.issue_detection]
+enabled = true
+
+workers_dev = false
+preview_urls = false
+
+[dev]
+port = 4000
+
+[vars]
+API_VERSION = "2.3"
+CACHE_ENABLED = "false"
+DEFAULT_REDIS_TTL = "900"
+
+# Optional Cloudflare KV namespace binding for edge caching:
+# [[kv_namespaces]]
+# binding = "CACHE_KV"
+# id = "<YOUR_KV_NAMESPACE_ID>"

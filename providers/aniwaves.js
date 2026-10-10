@@ -39,7 +39,7 @@ function formatName(value) {
 }
 
 function searchQueries(titles) {
-  return buildTitleSearchQueries(titles, 20);
+  return buildTitleSearchQueries(titles, 3);
 }
 
 async function fetchText(url, headers = {}) {
@@ -192,7 +192,7 @@ async function resolveSeries(anilistId, ctx = {}) {
     .map((candidate) => ({ candidate, score: candidateTitleScore(titles, candidate) }))
     .filter((item) => item.score >= 0.5)
     .sort((left, right) => right.score - left.score)
-    .slice(0, 12)
+    .slice(0, 4)
     .map((item) => item.candidate);
   const details = await Promise.all(shortlist.map((candidate) => fetchDetail(candidate).catch(() => null)));
   const valid = details
@@ -202,7 +202,7 @@ async function resolveSeries(anilistId, ctx = {}) {
     .sort((left, right) => right.score - left.score);
   const selected = valid[0];
   const runnerUp = valid[1];
-  if (!selected || (selected.score < 0.82 && !selected.partOrdinal) || (runnerUp && selected.score - runnerUp.score < 0.08)) {
+  if (!selected || (selected.score < 0.75 && !selected.partOrdinal) || (runnerUp && selected.score < 0.85 && selected.score - runnerUp.score < 0.04)) {
     throw new Error(`AniWaves match not confident for AniList ${anilistId}`);
   }
   const data = {
@@ -424,10 +424,28 @@ async function handleWatch(anilistId, audio, epNum, ctx = {}) {
       type: "embed",
       server: item.server.server,
       referer: sourceReferer,
-      priority: streams.length ? 4 : 5,
-      isActive: streams.length === 0,
+      priority: 4,
+      isActive: false,
     });
   }
+
+  // Ensure HLS streams (Vidplay/MyCloud) are prioritized over direct MP4s (DatSaV)
+  streams.sort((a, b) => {
+    if (a.type === "hls" && b.type !== "hls") return -1;
+    if (b.type === "hls" && a.type !== "hls") return 1;
+    const aVid = (a.server || "").toLowerCase() === "vidplay" ? 1 : 0;
+    const bVid = (b.server || "").toLowerCase() === "vidplay" ? 1 : 0;
+    if (aVid !== bVid) return bVid - aVid;
+    if (a.type !== "embed" && b.type === "embed") return -1;
+    if (b.type !== "embed" && a.type === "embed") return 1;
+    return 0;
+  });
+
+  if (streams.length > 0) {
+    streams[0].isActive = true;
+    streams[0].priority = 5;
+  }
+
   if (!streams.length) {
     const failure = settled.find((item) => item.error)?.error;
     throw failure ?? new Error(`AniWaves sources unavailable for episode ${epNum}`);
