@@ -424,10 +424,28 @@ async function handleWatch(anilistId, audio, epNum, ctx = {}) {
       type: "embed",
       server: item.server.server,
       referer: sourceReferer,
-      priority: streams.length ? 4 : 5,
-      isActive: streams.length === 0,
+      priority: 4,
+      isActive: false,
     });
   }
+
+  // Ensure HLS streams (Vidplay/MyCloud) are prioritized over direct MP4s (DatSaV)
+  streams.sort((a, b) => {
+    if (a.type === "hls" && b.type !== "hls") return -1;
+    if (b.type === "hls" && a.type !== "hls") return 1;
+    const aVid = (a.server || "").toLowerCase() === "vidplay" ? 1 : 0;
+    const bVid = (b.server || "").toLowerCase() === "vidplay" ? 1 : 0;
+    if (aVid !== bVid) return bVid - aVid;
+    if (a.type !== "embed" && b.type === "embed") return -1;
+    if (b.type !== "embed" && a.type === "embed") return 1;
+    return 0;
+  });
+
+  if (streams.length > 0) {
+    streams[0].isActive = true;
+    streams[0].priority = 5;
+  }
+
   if (!streams.length) {
     const failure = settled.find((item) => item.error)?.error;
     throw failure ?? new Error(`AniWaves sources unavailable for episode ${epNum}`);
