@@ -124,7 +124,7 @@ async function resolveSeries(anilistId, ctx = {}) {
 
   const media      = ctx.media ?? await getMedia(anilistId);
   const titles     = buildTitles(media, ctx.anizip);
-  const queries    = [...new Set([...buildKaaQueries(titles), ...buildTitleSearchQueries(titles, 12)])].slice(0, 20);
+  const queries    = [...new Set([...buildKaaQueries(titles), ...buildTitleSearchQueries(titles, 3)])].slice(0, 3);
   const seasonYear = media?.seasonYear;
   const format     = media?.format;
 

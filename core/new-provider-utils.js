@@ -268,15 +268,15 @@ function buildSearchQueries(title) {
   return [...queries].filter((q) => q.length >= 3);
 }
 
-export function buildTitleSearchQueries(titles, limit = 24) {
+export function buildTitleSearchQueries(titles, limit = 4) {
   const queries = new Map();
   const add = (value) => {
     const query = String(value ?? "").replace(/\s+/g, " ").trim();
     if (query.length >= 3) queries.set(query.toLowerCase(), query);
   };
-  const uniqueTitles = [...new Set(titles.filter(Boolean).map((title) => String(title).trim()).filter(Boolean))].slice(0, 12);
-  for (const title of uniqueTitles.slice(0, 8)) add(title);
-  for (const title of uniqueTitles.slice(0, 4)) {
+  const uniqueTitles = [...new Set(titles.filter(Boolean).map((title) => String(title).trim()).filter(Boolean))].slice(0, 6);
+  for (const title of uniqueTitles.slice(0, 4)) add(title);
+  for (const title of uniqueTitles.slice(0, 2)) {
     add(String(title).replace(/[^\p{L}\p{N}]+/gu, " "));
     for (const query of buildSearchQueries(String(title))) add(query);
     const segments = String(title).split(/[:\u2013\u2014|]/).map((part) => part.trim());
@@ -289,13 +289,13 @@ export function buildTitleSearchQueries(titles, limit = 24) {
       .trim();
     add(broad);
   }
-  for (const title of uniqueTitles.slice(8)) add(title);
+  for (const title of uniqueTitles.slice(4)) add(title);
   return [...queries.values()].slice(0, limit);
 }
 
-export async function findTopSlugs(titles, searchFn, n = 6) {
+export async function findTopSlugs(titles, searchFn, n = 3) {
   const allCandidates = new Map();
-  const searchQueries = buildTitleSearchQueries(titles, 20);
+  const searchQueries = buildTitleSearchQueries(titles, 4);
   await Promise.all(searchQueries.map(async (q) => {
     try {
       const results = await searchFn(q);

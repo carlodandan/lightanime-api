@@ -134,34 +134,23 @@ export async function buildFilteredEpisodesWithCache(anilistId, providers, media
 export async function buildEpisodesWithCache(anilistId, media, anizip) {
   const status = media?.status ?? "RELEASING";
   const ctx = { media, anizip, maxPages: undefined };
+  const fns = providerFns(anilistId, status, ctx);
 
-  const [mkissa, reanime, anikoto, animegg, animenosub, anizone, aniwaves, senshi, kaa, animedunya, animeonsen, anipm] = await Promise.all([
-    safe("mkissa",     () => withCache(`epv:match2:mkissa:${anilistId}`,     status, () => mkissaEpisodes(anilistId, ctx))),
-    safe("reanime",    () => withCache(`epv:match2:reanime:${anilistId}`,    status, () => reanimeEpisodes(anilistId, ctx))),
-    safe("anikoto",    () => withCache(`epv:match2:anikoto:${anilistId}`,    status, () => anikotoEpisodes(anilistId, ctx))),
-    safe("animegg",    () => withCache(`epv:match2:animegg:${anilistId}`,    status, () => animeggEpisodes(anilistId, ctx))),
-    safe("animenosub", () => withCache(`epv:match2:animenosub:${anilistId}`, status, () => animenosubEpisodes(anilistId, ctx))),
-    safe("anizone",    () => withCache(`epv:match2:anizone:${anilistId}`,    status, () => anizoneEpisodes(anilistId, ctx))),
-    safe("aniwaves",   () => withCache(`epv:match2:aniwaves:${anilistId}`,   status, () => aniwavesEpisodes(anilistId, ctx))),
-    safe("senshi",     () => withCache(`epv:senshi:${anilistId}`,     status, () => senshiEpisodes(anilistId, ctx))),
-    safe("kaa",        () => withCache(`epv:match2:kaa:${anilistId}`,        status, () => kaaEpisodes(anilistId, ctx))),
-    safe("animedunya", () => withCache(`epv:animedunya:${anilistId}`, status, () => animedunyaEpisodes(anilistId, ctx))),
-    safe("animeonsen", () => withCache(`epv:match2:animeonsen:${anilistId}`, status, () => animeonsenEpisodes(anilistId, ctx))),
-    safe("anipm",      () => withCache(`epv:match2:anipm:${anilistId}`,      status, () => anipmEpisodes(anilistId, ctx))),
-  ]);
+  // Primary reliable providers that provide full episodes and streams
+  const primaryProviders = ["reanime", "kaa", "anikoto"];
+  const primaryPairs = await Promise.all(
+    primaryProviders.map(async (name) => {
+      const result = await safe(name, fns[name]);
+      return [name, result.ok ? result.data : { error: result.error, stack: result.stack }];
+    })
+  );
 
-  return {
-    mkissa:      mkissa.ok      ? mkissa.data      : { error: mkissa.error,      stack: mkissa.stack },
-    reanime:     reanime.ok     ? reanime.data     : { error: reanime.error,     stack: reanime.stack },
-    anikoto:     anikoto.ok     ? anikoto.data     : { error: anikoto.error,     stack: anikoto.stack },
-    animegg:     animegg.ok     ? animegg.data     : { error: animegg.error,     stack: animegg.stack },
-    animenosub:  animenosub.ok  ? animenosub.data  : { error: animenosub.error,  stack: animenosub.stack },
-    anizone:     anizone.ok     ? anizone.data     : { error: anizone.error,     stack: anizone.stack },
-    aniwaves:    aniwaves.ok    ? aniwaves.data    : { error: aniwaves.error,    stack: aniwaves.stack },
-    senshi:      senshi.ok      ? senshi.data      : { error: senshi.error,      stack: senshi.stack },
-    kaa:         kaa.ok         ? kaa.data         : { error: kaa.error,         stack: kaa.stack },
-    animedunya:  animedunya.ok  ? animedunya.data  : { error: animedunya.error,  stack: animedunya.stack },
-    animeonsen:  animeonsen.ok  ? animeonsen.data  : { error: animeonsen.error,  stack: animeonsen.stack },
-    anipm:       anipm.ok       ? anipm.data       : { error: anipm.error,       stack: anipm.stack },
-  };
+  const result = Object.fromEntries(primaryPairs);
+
+  // Populate secondary providers gracefully so schema remains 100% backward compatible
+  for (const name of ["anizone", "aniwaves", "mkissa", "animegg", "animenosub", "senshi", "animedunya", "animeonsen", "anipm"]) {
+    result[name] = { error: `Provider ${name} available via /episodes/${name}/${anilistId}` };
+  }
+
+  return result;
 }
