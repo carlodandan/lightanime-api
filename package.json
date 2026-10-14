@@ -1,5 +1,5 @@
 {
-  "name": "all-api",
+  "name": "aenime-api",
   "version": "2.3.0",
   "type": "module",
   "main": "server.js",

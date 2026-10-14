@@ -4,12 +4,11 @@
 <img src="docs/logo.svg" width="80" height="80"/>
 
 
-# Anivexa API
+# Aenime API
 
 **Anime streaming aggregator API — one endpoint, all your sources.**
 
-![Views](https://visitor-badge.laobi.icu/badge?page_id=walterwhite-69.Anivexa-API)
-[![GitHub stars](https://img.shields.io/github/stars/walterwhite-69/Anivexa-API?style=flat-square&color=yellow)](https://github.com/walterwhite-69/Anivexa-API/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/carlodandan/lightanime-api?style=flat-square&color=yellow)](https://github.com/carlodandan/lightanime-api/stargazers)
 
 [Join the Discord](https://discord.gg/MARQ9z9QSX) (Not affiliated with or connected to this API; not a support server.)
 
@@ -192,8 +191,8 @@ The API does not expose a public ReAnime `/proxy` route. If you need direct cust
 ## Self-hosted
 
 ```bash
-git clone https://github.com/walterwhite-69/Anivexa-API
-cd Anivexa-API
+git clone https://github.com/carlodandan/lightanime-api
+cd lightanime-api
 npm install
 cp .env.example .env
 node server.js
