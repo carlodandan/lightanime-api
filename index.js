@@ -63,6 +63,87 @@ async function cachedWatch(cacheKey, handlerFn, ttl = WATCH_TTL) {
   finally { watchInflight.delete(cacheKey); }
 }
 
+async function handleM3u8Proxy(request) {
+  const url = new URL(request.url);
+  const targetUrl = url.searchParams.get("url");
+  if (!targetUrl) {
+    return json({ error: "Missing ?url= parameter" }, 400);
+  }
+
+  const rawHeaders = url.searchParams.get("headers");
+  let customHeaders = {};
+  if (rawHeaders) {
+    try {
+      customHeaders = JSON.parse(rawHeaders);
+    } catch {}
+  }
+
+  const fetchHeaders = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    ...customHeaders,
+  };
+
+  try {
+    const upstreamRes = await fetch(targetUrl, {
+      method: request.method,
+      headers: fetchHeaders,
+      redirect: "follow",
+    });
+
+    const contentType = upstreamRes.headers.get("content-type") || "";
+    const isM3u8 = targetUrl.includes(".m3u8") || contentType.includes("mpegurl") || contentType.includes("application/x-mpegURL");
+
+    if (isM3u8) {
+      const manifestText = await upstreamRes.text();
+      const baseUrl = new URL(targetUrl);
+
+      const rewritten = manifestText.split("\n").map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return line;
+
+        if (trimmed.startsWith("#")) {
+          return line.replace(/URI="([^"]+)"/g, (match, uri) => {
+            const absUri = new URL(uri, baseUrl).href;
+            const proxyUri = `${url.origin}${url.pathname}?url=${encodeURIComponent(absUri)}&headers=${encodeURIComponent(JSON.stringify(customHeaders))}`;
+            return `URI="${proxyUri}"`;
+          });
+        }
+
+        let absUrl;
+        if (trimmed.startsWith("//")) {
+          absUrl = `https:${trimmed}`;
+        } else {
+          absUrl = new URL(trimmed, baseUrl).href;
+        }
+
+        return `${url.origin}${url.pathname}?url=${encodeURIComponent(absUrl)}&headers=${encodeURIComponent(JSON.stringify(customHeaders))}`;
+      }).join("\n");
+
+      return new Response(rewritten, {
+        status: upstreamRes.status,
+        headers: {
+          "Content-Type": "application/vnd.apple.mpegurl",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Cache-Control": "no-cache",
+        },
+      });
+    }
+
+    return new Response(upstreamRes.body, {
+      status: upstreamRes.status,
+      headers: {
+        "Content-Type": contentType || "video/mp2t",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Cache-Control": "public, max-age=3600",
+      },
+    });
+  } catch (err) {
+    return json({ error: `Proxy error: ${err.message}` }, 502);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url  = new URL(request.url);
@@ -77,6 +158,10 @@ export default {
           "Access-Control-Allow-Headers": "*",
         },
       });
+    }
+
+    if (path === "/m3u8-proxy" || path === "/api/m3u8-proxy") {
+      return handleM3u8Proxy(request);
     }
 
     let m = path.match(/^\/map\/(\d+)\/?$/);

@@ -75,6 +75,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Anivexa dev server → http://0.0.0.0:${PORT}`);
+server.listen(PORT, "localhost", () => {
+  console.log(`Anivexa dev server → http://localhost:${PORT}`);
 });
